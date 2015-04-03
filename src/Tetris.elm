@@ -21,6 +21,7 @@ import Graphics.Collage as C
 import Text
 import Time (inSeconds, every, second)
 import Signal
+import Signal ((<~), (~), Signal)
 type alias Piece = (Tetromino, TetrisColor)
 
 
@@ -85,8 +86,10 @@ game = { board=emptyBoard,
          paused=True,
          gameover=False,
          music=True,
---          click=False,
-         dropSound=False
+         click=False,
+         dropSound=False,
+         keys=[],                -- TODO:適当なのであとで直す
+         time=0                 -- TODO:適当なのであとで直す
        }
 
 getPoints x =
@@ -100,7 +103,6 @@ getPoints x =
 handle (arrow, keys, t, next, init) = smoothControl t keys << cleanup keys << setPiece next t << autoDrop t << arrowControls arrow << keyControls keys << hold keys next << startup init << restartGame keys << pause keys << toggleMusic keys << dropSound keys << clear
 
 clear game = {game | click <- False, dropSound <- False}
--- clear game = {game | click <- False, dropSound <- False}
 
 hold ks n game = 
   let doHold = List.any ((==) holdKey) ks in
@@ -309,7 +311,7 @@ gameoverScreenText game =
   let contents = G.flow G.down [label "Score: " game.score, 
                           label "Level: " game.level,
                           label "Lines: " game.lines] in
-  let title = Text.leftAligned << Text.height 28 << Text.bold << Text.asText <| "Game Over" in
+  let title = Text.asText << Text.leftAligned << Text.height 28 << Text.bold << Text.fromString <| "Game Over" in
   G.flow G.down [G.spacer 10 10, title, G.spacer 50 50, contents, Text.plainText "Press R to play again"]
 
 pauseScreenText game = 
@@ -324,7 +326,7 @@ pauseScreenText game =
                   "P - Toggle this screen",
                   "M - Toggle Music",
                   "R - New Game"] in
-  let title = Text.leftAligned << Text.height 28 << Text.bold << Text.asText <| "Elmtris" in
+  let title = Text.asText << Text.leftAligned << Text.height 28 << Text.bold << Text.fromString <| "Elmtris" in
   G.flow G.down [G.spacer 10 10, title, G.spacer 50 50, contents]
 
 
@@ -370,14 +372,15 @@ pieceToElement (tr, color) =
 
 ticker = every <| second/fps
 
-inputSignal = Signal.map5 (,,,,) arrows keysDown ticker (Random.int 0 6 ticker) (randoms 6 0 6 ticker)
+-- inputSignal : Signal a (List Int) Float Int Int
+inputSignal = Signal.map5 (,,,,) arrows keysDown ticker (Signal.constant 3) (Signal.constant 4)      -- TODO:あとでちゃんとrandomにする
 
 piece = rotate CW <| shift (0,1) zpiece
 
-randoms n low high sig = combine <| randoms' n low high sig
+-- randoms n low high sig = combine <| randoms' n low high sig
 
-randoms' n low high sig =
-  if n <= 0 then [] else (Random.int low high sig)::(randoms' (n-1) low high sig)  
+-- randoms' n low high sig =
+--   if n <= 0 then [] else 3::(randoms' (n-1) low high sig)  
 
 -- handleTheme g = if g.music && (not g.paused) then Audio.Play else Audio.Pause
 
@@ -406,6 +409,6 @@ randoms' n low high sig =
 --                     actions = handleSwap <~ mainSignal }
 --     in Audio.audio builder
 
-mainSignal = foldp handle game inputSignal
+mainSignal = Signal.foldp handle game inputSignal
 
 main = render <~ mainSignal
