@@ -5,6 +5,7 @@ import Location (..)
 import TetrisColor (..)
 import Dict (Dict, toList)
 import Dict
+import List
 import Graphics.Element (..)
 import Graphics.Collage (filled, rect, move, collage, group, Form, square, outlined, solid)
 import Color (..)
@@ -31,7 +32,7 @@ asElement b blockSize =
   collage width height [background, blocks]
   
 insertTetromino : (Tetromino, TetrisColor) -> Board -> Board  
-insertTetromino (toAdd, color) b = Dict.foldr (\loc -> insert loc color) b toAdd
+insertTetromino (toAdd, color) b = List.foldr (\loc board -> insert loc color board) b toAdd
 
 insert : Location -> TetrisColor -> Board -> Board
 insert = Dict.insert
