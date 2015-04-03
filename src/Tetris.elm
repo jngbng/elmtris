@@ -1,7 +1,7 @@
 module Tetris where
 
-import Audio
-import Audio(defaultTriggers)
+-- import Audio
+-- import Audio(defaultTriggers)
 import Mouse
 import Util (..)
 import Tetromino (..)
@@ -79,7 +79,7 @@ game = { board=emptyBoard,
          paused=True,
          gameover=False,
          music=True,
-         click=False,
+--          click=False,
          dropSound=False
        }
 
@@ -94,6 +94,7 @@ getPoints x =
 handle (arrow, keys, t, next, init) = smoothControl t keys . cleanup keys . setPiece next t . autoDrop t . arrowControls arrow . keyControls keys . hold keys next . startup init . restartGame keys . pause keys . toggleMusic keys . dropSound keys . clear
 
 clear game = {game | click <- False, dropSound <- False}
+-- clear game = {game | click <- False, dropSound <- False}
 
 hold ks n game = 
   let doHold = any ((==) holdKey) ks in
@@ -372,32 +373,32 @@ randoms n low high sig = combine <| randoms' n low high sig
 randoms' n low high sig =
   if n <= 0 then [] else (range low high sig)::(randoms' (n-1) low high sig)  
 
-handleTheme g = if g.music && (not g.paused) then Audio.Play else Audio.Pause
+-- handleTheme g = if g.music && (not g.paused) then Audio.Play else Audio.Pause
 
-theme =
-    let props p = if p.currentTime > 37.6 then Just (Audio.Seek 0.05) else Nothing 
-        builder = { src = "snd/theme.mp3",
-                    triggers = {defaultTriggers | timeupdate <- True},
-                    propertiesHandler = props,
-                    actions = handleTheme <~ mainSignal }
-    in Audio.audio builder
+-- theme =
+--     let props p = if p.currentTime > 37.6 then Just (Audio.Seek 0.05) else Nothing 
+--         builder = { src = "snd/theme.mp3",
+--                     triggers = {defaultTriggers | timeupdate <- True},
+--                     propertiesHandler = props,
+--                     actions = handleTheme <~ mainSignal }
+--     in Audio.audio builder
 
-handleClick g = if g.music && g.click && (not g.paused) then Audio.Play else Audio.NoChange
+-- handleClick g = if g.music && g.click && (not g.paused) then Audio.Play else Audio.NoChange
 
-click =
-    let builder = { src = "snd/click.wav",
-                    triggers = defaultTriggers,
-                    propertiesHandler = (\_ -> Nothing),
-                    actions = handleClick <~ mainSignal }
-    in Audio.audio builder
+-- click =
+--     let builder = { src = "snd/click.wav",
+--                     triggers = defaultTriggers,
+--                     propertiesHandler = (\_ -> Nothing),
+--                     actions = handleClick <~ mainSignal }
+--     in Audio.audio builder
 
-handleSwap g = if g.music && g.dropSound && (not g.paused) then Audio.Play else Audio.NoChange
-swap =
-    let builder = { src = "snd/woosh.wav",
-                    triggers = defaultTriggers,
-                    propertiesHandler = (\_ -> Nothing),
-                    actions = handleSwap <~ mainSignal }
-    in Audio.audio builder
+-- handleSwap g = if g.music && g.dropSound && (not g.paused) then Audio.Play else Audio.NoChange
+-- swap =
+--     let builder = { src = "snd/woosh.wav",
+--                     triggers = defaultTriggers,
+--                     propertiesHandler = (\_ -> Nothing),
+--                     actions = handleSwap <~ mainSignal }
+--     in Audio.audio builder
 
 mainSignal = foldp handle game inputSignal
 
