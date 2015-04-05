@@ -5,3 +5,5 @@ cache/
 Makefile*
 [#]*
 /elm-stuff/
+/elm.js
+/tetris.html

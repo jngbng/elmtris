@@ -10,6 +10,8 @@ import Graphics.Element (..)
 import Graphics.Collage (filled, rect, move, collage, group, Form, square, outlined, solid)
 import Color (..)
 
+import Debug
+
 -- Board is a dictionary of Locations and the color of the block there
 type alias Board = Dict Location TetrisColor
 

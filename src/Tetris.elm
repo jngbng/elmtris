@@ -1,7 +1,7 @@
 module Tetris where
 
--- import Audio
--- import Audio(defaultTriggers)
+import Audio
+import Audio(defaultTriggers)
 import Mouse
 import Util (..)
 import Tetromino (..)
@@ -22,6 +22,8 @@ import Text
 import Time (inSeconds, every, second)
 import Signal
 import Signal ((<~), (~), Signal)
+import Debug
+
 type alias Piece = (Tetromino, TetrisColor)
 
 
@@ -83,13 +85,14 @@ game = { board=emptyBoard,
          lines=0,
          tick=0,
          set=False,
-         paused=True,
+         paused=False,
+--          paused=True,
          gameover=False,
          music=True,
          click=False,
          dropSound=False,
          keys=[],                -- TODO:適当なのであとで直す
-         time=0                 -- TODO:適当なのであとで直す
+         time=1                 -- TODO:適当なのであとで直す
        }
 
 getPoints x =
@@ -100,7 +103,7 @@ getPoints x =
     4 -> 1000
     _ -> 0
 
-handle (arrow, keys, t, next, init) = smoothControl t keys << cleanup keys << setPiece next t << autoDrop t << arrowControls arrow << keyControls keys << hold keys next << startup init << restartGame keys << pause keys << toggleMusic keys << dropSound keys << clear
+handle (arrow, keys, t, next, init) = smoothControl t keys << cleanup keys << setPiece (Debug.log "next" next) t << autoDrop t << arrowControls arrow << keyControls keys << hold keys next << startup (Debug.log "init" init) << restartGame keys << pause keys << toggleMusic keys << dropSound keys << clear
 
 clear game = {game | click <- False, dropSound <- False}
 
@@ -284,17 +287,22 @@ render game =
   let withPiece = insertTetromino (game.falling) (game.board) in
   let boardDisplay = asElement withPiece blockSize in
   let boardWithShadow = shadow (game.falling) (game.board) boardDisplay in
-  if game.paused then pauseScreen game else
-    if game.gameover then gameoverScreen game else
-  G.flow G.down [G.spacer 10 10, 
-             G.flow G.right [holdBoard game, G.spacer 10 10, 
-                           boardWithShadow, G.spacer 10 10, 
-                           previewBoard game]]
+  if game.paused then pauseScreen game else -- TODO：このコメントを外すとボードが表示されない。あとで調べる
+--     if game.gameover then gameoverScreen game else
+  G.flow G.down [
+        G.spacer 10 10, 
+        G.flow G.right [
+              holdBoard game,
+              G.spacer 10 10, 
+              boardWithShadow,
+              G.spacer 10 10, 
+              previewBoard game
+             ]]
 
 pauseScreen game = 
   let w = width+2*panelWidth in
   let h = height in
-  let elem = G.container w h G.middle <| pauseScreenText game in
+  let elem = G.container w h G.middle <| pauseScreenText (Debug.log "game" game) in
   let form = C.collage w h [C.toForm elem] in
   form
 
@@ -372,42 +380,42 @@ pieceToElement (tr, color) =
 
 ticker = every <| second/fps
 
--- inputSignal : Signal a (List Int) Float Int Int
-inputSignal = Signal.map5 (,,,,) arrows keysDown ticker (Signal.constant 3) (Signal.constant 4)      -- TODO:あとでちゃんとrandomにする
+inputSignal : Signal ({x:Int, y:Int}, (List Int), Float, Int, (List Int))
+inputSignal = Signal.map5 (,,,,) arrows keysDown ticker (range 0 6 ticker) (randoms 6 0 6 ticker)
 
 piece = rotate CW <| shift (0,1) zpiece
 
--- randoms n low high sig = combine <| randoms' n low high sig
+range : Int -> Int -> Signal Float -> Signal Int
+range low high sig = (\s -> Random.generate (Random.int low high) (Random.initialSeed (round s)) |> fst) <~ sig
 
--- randoms' n low high sig =
---   if n <= 0 then [] else 3::(randoms' (n-1) low high sig)  
+randoms : Int -> Int -> Int -> Signal Float -> Signal (List Int)
+randoms n low high sig = (\s -> Random.generate (Random.list n (Random.int low high)) (Random.initialSeed (round s)) |> fst) <~ sig
+handleTheme g = if g.music && (not g.paused) then Audio.Play else Audio.Pause
 
--- handleTheme g = if g.music && (not g.paused) then Audio.Play else Audio.Pause
+theme =
+    let props p = if p.currentTime > 37.6 then Just (Audio.Seek 0.05) else Nothing 
+        builder = { src = "snd/theme.mp3",
+                    triggers = {defaultTriggers | timeupdate <- True},
+                    propertiesHandler = props,
+                    actions = handleTheme <~ mainSignal }
+    in Audio.audio builder
 
--- theme =
---     let props p = if p.currentTime > 37.6 then Just (Audio.Seek 0.05) else Nothing 
---         builder = { src = "snd/theme.mp3",
---                     triggers = {defaultTriggers | timeupdate <- True},
---                     propertiesHandler = props,
---                     actions = handleTheme <~ mainSignal }
---     in Audio.audio builder
+handleClick g = if g.music && g.click && (not g.paused) then Audio.Play else Audio.NoChange
 
--- handleClick g = if g.music && g.click && (not g.paused) then Audio.Play else Audio.NoChange
+click =
+    let builder = { src = "snd/click.wav",
+                    triggers = defaultTriggers,
+                    propertiesHandler = (\_ -> Nothing),
+                    actions = handleClick <~ mainSignal }
+    in Audio.audio builder
 
--- click =
---     let builder = { src = "snd/click.wav",
---                     triggers = defaultTriggers,
---                     propertiesHandler = (\_ -> Nothing),
---                     actions = handleClick <~ mainSignal }
---     in Audio.audio builder
-
--- handleSwap g = if g.music && g.dropSound && (not g.paused) then Audio.Play else Audio.NoChange
--- swap =
---     let builder = { src = "snd/woosh.wav",
---                     triggers = defaultTriggers,
---                     propertiesHandler = (\_ -> Nothing),
---                     actions = handleSwap <~ mainSignal }
---     in Audio.audio builder
+handleSwap g = if g.music && g.dropSound && (not g.paused) then Audio.Play else Audio.NoChange
+swap =
+    let builder = { src = "snd/woosh.wav",
+                    triggers = defaultTriggers,
+                    propertiesHandler = (\_ -> Nothing),
+                    actions = handleSwap <~ mainSignal }
+    in Audio.audio builder
 
 mainSignal = Signal.foldp handle game inputSignal
 
