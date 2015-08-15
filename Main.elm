@@ -1,64 +1,99 @@
-module Tetris where
+-- module Tetris where
 
 import Audio
-import Audio(defaultTriggers)
+import Audio exposing (defaultTriggers)
 import Mouse
-import Util (..)
-import Tetromino (..)
-import TetrisColor (..)
-import Board (..)
-import Control (..)
+import Util exposing  (..)
+import Tetromino exposing (..)
+import TetrisColor exposing (..)
+import Board exposing (..)
+import Control exposing (..)
 import Control
-import Dict (Dict, fromList, member, getOrElse)
+import Dict exposing (Dict, fromList, member)
 import Dict
-import Keyboard (arrows, keysDown)
-import Random (range)
-import Char (toCode, fromCode)
-import Graphics.Element as G
-import Graphics.Collage as C
-import Text
-type Piece = (Tetromino, TetrisColor)
-
+import Keyboard exposing (arrows, keysDown)
+import Random
+import Char exposing (toCode, fromCode)
+import Graphics.Element as G exposing (spacer, midTop, container, down, flow, leftAligned, middle)
+import Graphics.Collage as C exposing (collage, move, group)
+import Text exposing (bold)
+import Time exposing (every, second, inSeconds)
+import Signal exposing ((<~), foldp)
+import List exposing (map, head, tail, intersperse, foldr)
+import Set
+import Debug
+                      
+type alias Piece = (Tetromino, TetrisColor)
 
 width = 300
 height = 2*width
 fwidth = toFloat width
 fheight = toFloat height
-panelWidth = width `div` 3
+panelWidth = width // 3
 panelHeight = height
 
-blockSize = width `div` 10
+blockSize = width // 10
 fblockSize = toFloat blockSize
 tapDelay = 0.08
 maxMovesPerSecond = 100
 fps = 200
 setDelay = 0.5
 
-restartKey : Int
-restartKey = toCode 'r'
+restartKey : Keyboard.KeyCode
+restartKey = toCode 'R'
 
-pauseKey : Int
-pauseKey = toCode 'p'
+pauseKey : Keyboard.KeyCode
+pauseKey = toCode 'P'
 
-hardDropKey : Int
+hardDropKey : Keyboard.KeyCode
 hardDropKey = toCode ' '
 
-holdKey : Int
-holdKey = toCode 'x'
+holdKey : Keyboard.KeyCode
+holdKey = toCode 'X'
 
-toggleMusicKey : Int
-toggleMusicKey = toCode 'm'
+toggleMusicKey : Keyboard.KeyCode
+toggleMusicKey = toCode 'M'
+
+(.) = (<<)
 
 pieceDict : Dict Int Piece
 pieceDict = fromList . zip [0..6] <| pieces
-pieces : [Piece]
+pieces : List Piece
 pieces = 
   zip (map (shift (4, 0)) [line, square, zpiece, spiece, jpiece, lpiece, tpiece])
-      [Red,  Orange, Yellow, Green,  Blue,   Indigo, Violet]
+      [Red, Orange, Yellow, Green, Blue, Indigo, Violet]
+
+defaultPiece = (shift (4,0) line, Red)
 
 getPiece : Int -> Piece
-getPiece n = getOrElse (head pieces) n pieceDict
+getPiece n = Dict.get n pieceDict |> Maybe.withDefault defaultPiece
 
+type alias GameState = {board:Board,
+         init:Bool,
+         falling:Piece, 
+         preview:List Piece,
+         hold: Maybe Piece,
+         canHold:Bool,
+         tap:Bool,
+         tapped:(Bool, Float),
+         keyDelay:Bool,
+         forceDelay:Bool,
+         setDelay:Float,
+         timestamp:Float,
+         level:Float, 
+         score:Int,
+         lines:Int,
+         tick:Float,
+         set:Bool,
+         paused:Bool,
+         gameover:Bool,
+         music:Bool,
+         click:Bool,
+         dropSound:Bool,
+         keys:List Keyboard.KeyCode
+       }
+
+game : GameState
 game = { board=emptyBoard, 
          init=True,
          falling=(getPiece 0), 
@@ -80,7 +115,8 @@ game = { board=emptyBoard,
          gameover=False,
          music=True,
          click=False,
-         dropSound=False
+         dropSound=False,
+         keys=[]
        }
 
 getPoints x =
@@ -91,32 +127,37 @@ getPoints x =
     4 -> 1000
     _ -> 0
 
+type alias GameSignal = ( {x : Int, y: Int}, List Keyboard.KeyCode, Time.Time, Int, List Int)
+
+handle : GameSignal -> GameState -> GameState
 handle (arrow, keys, t, next, init) = smoothControl t keys . cleanup keys . setPiece next t . autoDrop t . arrowControls arrow . keyControls keys . hold keys next . startup init . restartGame keys . pause keys . toggleMusic keys . dropSound keys . clear
 
 clear game = {game | click <- False, dropSound <- False}
 
+hold : List Keyboard.KeyCode -> Int -> GameState -> GameState
 hold ks n game = 
-  let doHold = any ((==) holdKey) ks in
+  let doHold = List.member holdKey ks in
   if doHold then (swapHold (getPiece n) game) else game
 
 
 dropSound keys g =
   if g.forceDelay then g else
-    if (any ((==)hardDropKey) keys) then {g | dropSound <- True} else g
+    if (List.member hardDropKey keys) then {g | dropSound <- True} else g
 
-restartGame keys g =                                                   
+restartGame keys g =
   if g.forceDelay then g else
-  if (any ((==)restartKey) keys) then {game| paused <- False, forceDelay <- True} else g
+  if (List.member restartKey keys) then {game| paused <- False, forceDelay <- True} else g
 
-pause keys game =                                                   
+pause keys game =
   if game.forceDelay then game else
-  if (any ((==)pauseKey) keys) then {game| paused <- not game.paused, forceDelay <- True} else game
+  if (List.member pauseKey keys) then {game| paused <- not game.paused, forceDelay <- True} else game
 
 toggleMusic keys game =                                                   
   if game.forceDelay then game else
-  if (any ((==)toggleMusicKey) keys) then {game| music <- not game.music, forceDelay <- True} else game
+  if (List.member toggleMusicKey keys) then {game| music <- not game.music, forceDelay <- True} else game
 
 
+swapHold : Piece -> GameState -> GameState
 swapHold piece game = 
   case game.canHold of
     False -> game
@@ -124,14 +165,15 @@ swapHold piece game =
       let next = {game| hold <- (Just . reset <| game.falling),
                         canHold <- False} in
       case game.hold of
-        Nothing -> {next| falling <- (head game.preview), 
-                          preview <- ((tail game.preview) ++ [piece])}
+        Nothing -> {next| falling <- (head game.preview |> Maybe.withDefault defaultPiece), 
+                          preview <- ((tail game.preview |> Maybe.withDefault []) ++ [piece])}
         Just held -> {next| falling <- held}
-                     
+
+reset : Piece -> Piece
 reset (tr, color) =
   let ((minX, minY), (_, maxY)) = bounds tr in
   let width = 1 + maxY - minY in
-  let center = (boardWidth `div` 2) - (width `div` 2) in
+  let center = (boardWidth // 2) - (width // 2) in
   let tr' = shift (center, 0) . shift (-minX, -minY) <| tr in
   (tr', color)
 
@@ -168,7 +210,7 @@ cleanup keys game =
   let points = getPoints cleared in
   let score = game.score + points in
   let lines = game.lines + cleared in
-  let level = toFloat <| (lines `div` 10) + 1 in
+  let level = toFloat <| (lines // 10) + 1 in
   {game| board <- board', 
          score <- score, 
          lines <- lines, 
@@ -192,17 +234,17 @@ setPiece n t game =
     True ->
       if not . checkSet . toGameState <| game then game else
       if (game.setDelay > (inSeconds t)) then game else
-      let next = head game.preview in
-      let preview = (tail game.preview) ++ [getPiece n] in
+      let next = head game.preview |> Maybe.withDefault defaultPiece in
+      let preview = (tail game.preview |> Maybe.withDefault []) ++ [getPiece n] in
       let board' = insertTetromino (game.falling) (game.board) in
       let game' = {game | board <- board', falling <- next, preview <- preview} in
       let gameover = not . isValidState . toGameState <| game' in
-      {game'| time <- (inSeconds t), set <- False, canHold <- True, gameover <- gameover}
+      {game'| timestamp <- (inSeconds t), set <- False, canHold <- True, gameover <- gameover}
 
 toGameState game = (game.board, fst <| game.falling)
 
 getLevel : Int -> Float
-getLevel n = toFloat <| (n `div` 10) + 1
+getLevel n = toFloat <| (n // 10) + 1
 
 keyControls ks game = 
   foldr doControl game (map getKeyControl ks)
@@ -217,7 +259,7 @@ arrowControls arr game =
   let game' = foldr doControl game <| getArrowControl (x, y) in
   if y == 1 then {game'| click <- True} else game'
       
-getArrowControl : (Int, Int) -> [Maybe Control]
+getArrowControl : (Int, Int) -> List (Maybe Control)
 getArrowControl (x, y) =  
   let moveX = 
         case x of
@@ -261,6 +303,9 @@ isSetControl c =
     HardDrop -> True
     _ -> False
 
+plainText = Text.fromString >> leftAligned
+asText = toString >> Text.fromString >> leftAligned         
+
 label l r = flow G.right [plainText l, spacer 5 5, asText r]
   
 
@@ -302,7 +347,7 @@ gameoverScreenText game =
   let contents = flow down [label "Score: " game.score, 
                           label "Level: " game.level,
                           label "Lines: " game.lines] in
-  let title = leftAligned . Text.height 28 . bold . toText <| "Game Over" in
+  let title = leftAligned . Text.height 28 . bold . Text.fromString <| "Game Over" in
   flow down [spacer 10 10, title, spacer 50 50, contents, plainText "Press R to play again"]
 
 pauseScreenText game = 
@@ -317,7 +362,7 @@ pauseScreenText game =
                   "P - Toggle this screen",
                   "M - Toggle Music",
                   "R - New Game"] in
-  let title = leftAligned . Text.height 28 . bold . toText <| "Elmtris" in
+  let title = leftAligned . Text.height 28 . bold . Text.fromString <| "Elmtris" in
   flow down [spacer 10 10, title, spacer 50 50, contents]
 
 
@@ -361,11 +406,23 @@ pieceToElement (tr, color) =
   let piece =  move offset <| pieceToForm fblockSize' (tr, color) in
   collage (width+10) (height+10) [piece]
 
-ticker = every <| second/fps
+ticker = every <| Time.second/fps
 
-inputSignal = lift5 (,,,,) arrows keysDown ticker (range 0 6 ticker) (randoms 6 0 6 ticker)
+range low high sig =
+  Signal.map (\time ->
+                let seed = Random.initialSeed (round time) in
+                let gen = Random.int low high in
+                Random.generate gen seed |> fst) sig
+
+inputSignal : Signal GameSignal
+inputSignal = Signal.map5 (,,,,) arrows (Signal.map Set.toList keysDown) ticker (range 0 6 ticker) (randoms 6 0 6 ticker)
 
 piece = rotate CW <| shift (0,1) zpiece
+
+-- Deprecated function
+combine : List (Signal a) -> Signal (List a)
+combine signals =
+    List.foldr (Signal.map2 (::)) (Signal.constant []) signals
 
 randoms n low high sig = combine <| randoms' n low high sig
 
@@ -399,6 +456,7 @@ swap =
                     actions = handleSwap <~ mainSignal }
     in Audio.audio builder
 
+mainSignal : Signal GameState
 mainSignal = foldp handle game inputSignal
 
 main = render <~ mainSignal

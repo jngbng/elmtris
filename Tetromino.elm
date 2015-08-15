@@ -1,11 +1,11 @@
 module Tetromino where
 
-import Location (..)
+import Location exposing (..)
 import Util
 
 -- A Tetromino is a list of Locations. By definition, a valid tetromino
 -- should contain exactly 4 different locations
-type Tetromino = [Location]
+type alias Tetromino = List Location
 
 -- A line piece 
 -- ****

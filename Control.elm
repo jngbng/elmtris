@@ -1,25 +1,26 @@
 module Control where
 
-import Util (..)
-import Location (..)
-import Tetromino (..)
-import Board (..)
-import Dict (empty, insert, member, toList, remove, fromList)
+import Util exposing (..)
+import Location exposing (..)
+import Tetromino exposing (..)
+import Board exposing (..)
+import Dict exposing (empty, insert, member, toList, remove, fromList)
+import List exposing (filter, unzip, minimum, maximum, foldr, length, map, reverse)
 
-data Control = MoveLeft
+type Control = MoveLeft
              | MoveRight
              | Drop
              | HardDrop
              | Rotate Rotation
                
-type GameState = (Board, Tetromino)
+type alias GameState = (Board, Tetromino)
 
 -- A bound is a pair of minimum and maximum locations. Typically,
 -- A bound is the containing box of a tetromino
-type Bound = (Location, Location)
+type alias Bound = (Location, Location)
 
 -- A Tetromino can be rotate Clockwise or Counter Clockwise
-data Rotation = CW
+type Rotation = CW
               | CCW
                 
 left : Tetromino -> Tetromino
@@ -47,7 +48,7 @@ shift (offX, offY) tr =
 rotate : Rotation -> Tetromino -> Tetromino
 rotate rot tr = 
   case rot of
-    CCW -> rotate CW . rotate CW . rotate CW <| tr
+    CCW -> rotate CW << rotate CW << rotate CW <| tr
     CW ->
       let ((minX, minY), (maxX, maxY)) = bounds tr in
       let rows = maxY - minY in
@@ -75,21 +76,29 @@ centerOfMass tr =
   let (sumX, sumY, tot) = foldr (\(x0,y0) (x1,y1,t) -> ((toFloat x0)+x1, (toFloat y0)+y1, t+1)) (0,0,0) tr in
   (round <| sumY / tot, round' <| sumX / tot)
 
+minimumDefault : List Int -> Int -> Int
+minimumDefault xs default =
+  minimum xs |> Maybe.withDefault default
+
+maximumDefault : List Int -> Int -> Int
+maximumDefault xs default =
+  maximum xs |> Maybe.withDefault default
+
 -- Given a Tetromino, return the bounding box that encompasses
 -- all of its locations
 bounds : Tetromino -> Bound
 bounds tr = 
   let (xs, ys) = unzip tr in
-  ( (minimum xs, minimum ys), (maximum xs, maximum ys))
+  ( (minimumDefault xs 0, minimumDefault ys 0), (maximumDefault xs 0, maximumDefault ys 0))
 
 clearBoard : Board -> (Board, Int)
 clearBoard b = 
   let cleared = map (checkLine b) (reverse [0..19]) in
   let newBoard = clear 19 cleared b in
-  let linesCleared = length . filter (\x -> x) <| cleared in
+  let linesCleared = length << filter (\x -> x) <| cleared in
   (newBoard, linesCleared)
   
-clear : Int -> [Bool] -> Board -> Board
+clear : Int -> List Bool -> Board -> Board
 clear n xs b =
   case xs of
     [] -> b
@@ -97,16 +106,16 @@ clear n xs b =
       case x of 
         False -> clear (n-1) bs b
         True ->
-          let toDrop = filter (\((_,y),_) -> y < n) . toList <| b in
-          let keep = filter (\((_,y),_) -> y > n) . toList <| b in
+          let toDrop = filter (\((_,y),_) -> y < n) << toList <| b in
+          let keep = filter (\((_,y),_) -> y > n) << toList <| b in
           let drop ((x, y), color) = ((x, y+1), color) in
-          let dropped = map drop toDrop in
+          let dropped = List.map drop toDrop in
           let cleared = fromList (dropped ++ keep) in
           clear n bs cleared
 
 checkLine : Board -> Int -> Bool
 checkLine b n =
-  let locs = zip [0..9] (replicate 10 n) in
+  let locs = List.map (\x -> (x, n)) [0..9] in
   let check loc acc = (member loc b) && acc in
   foldr check True locs
 
@@ -118,7 +127,7 @@ isValidState (board, tr) =
   noCollision && inBounds
   
 checkSet : GameState -> Bool
-checkSet = not . isValidState . (flip forceControl Drop)
+checkSet = not << isValidState << (flip forceControl Drop)
   
 control : GameState -> Control -> GameState
 control s c = 
