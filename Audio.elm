@@ -13,6 +13,7 @@ module Audio where
 import Native.Audio
 import Signal
 import Time exposing (Time)
+import Debug
 
 {-| An Action controls how audio is heard. -}
 type Action = Play | Pause | Seek Time | NoChange
@@ -58,7 +59,7 @@ audio audioBuilder =
                        Pause -> Native.Audio.pause sound
                        Seek t -> Native.Audio.seek sound t
                        NoChange -> ())
-    in Native.Audio.audio 
+    in Native.Audio.audio
           handleEvent
           audioBuilder.src
           audioBuilder.triggers
