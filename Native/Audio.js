@@ -54,7 +54,7 @@ Elm.Native.Audio.make = function(elm) {
 
         function fireProp(eventCons){
             var props = Properties(sound.duration, sound.currentTime, sound.ended);
-            elm.notify(event2.id, Tuple2(eventCons, props));
+            elm.notify(event.id, Tuple2(eventCons, props));
             var action = propHandler(props);
             if(action.ctor == "Just")
                 handle(action._0)

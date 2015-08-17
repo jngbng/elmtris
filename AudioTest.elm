@@ -7,7 +7,6 @@ import Text
 import Graphics.Element exposing (..)
 import List
 import Set
-import Debug
 
 -- We are either Playing or Not Playing
 type alias State = { playing : Bool }
@@ -53,8 +52,6 @@ builder = Audio.audio { src = "snd/theme.mp3",
 display : (State, (Audio.Event, Audio.Properties)) -> Element
 display (state, (event, properties)) =
     let playing = if state.playing then "Playing" else "Paused"
-        bbb = Debug.watch "event" event
-        ttt = Debug.watch "properties" properties
         progress = "Current Time: " ++ toString (properties.currentTime)
         duration = "Duration: " ++ toString (properties.duration)
     in flow down <| List.map (leftAligned << Text.fromString)
@@ -66,5 +63,4 @@ display (state, (event, properties)) =
 
 main =
   let output = (,) <~ stateful ~ builder in
-  -- let output = Signal.map2 (,) stateful (builder stateful) in
   display <~ output

@@ -459,4 +459,4 @@ swap =
 mainSignal : Signal GameState
 mainSignal = foldp handle game inputSignal
 
-main = render <~ mainSignal
+main = Signal.map4 (\theme click swap gameState -> render gameState) theme click swap mainSignal
